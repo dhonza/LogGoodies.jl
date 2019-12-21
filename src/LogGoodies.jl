@@ -1,5 +1,7 @@
 module LogGoodies
 
+using Dates
+using DataFrames
 using Logging
 using Logging: BelowMinLevel, Debug, Error, Info, Warn
 using LoggingExtras
@@ -8,8 +10,9 @@ using Printf
 
 export FlushedLogger
 export @debug, @error, @info, @warn
-export Debug, Error, Info, Warn 
-export TeeLogger, global_logger
+export Debug, Error, Info, Warn, BelowMinLevel 
+export TeeLogger, global_logger, set_logger, append_default_flushed_logger
+export dataframe_to_md
 
 """
 FlushedLogger(stream=stderr, min_level=Info)
@@ -77,6 +80,30 @@ function handle_message(logger::FlushedLogger, level, message, _module, group, i
     nothing
 end
 
-greet() = print("Hello World!")
+function append_default_flushed_logger(logfile = "log.txt", level = Info)
+    old_logger = global_logger()
+    tee_logger = TeeLogger(
+        old_logger,
+        FlushedLogger(logfile, level, showmodule=false, showfile=:short)
+    )
+    global_logger(tee_logger)
+
+    @info "host name: $(gethostname())"
+    @info "SLURM_JOB_ID: $(get(ENV, "SLURM_JOB_ID", "N/A"))"
+    @info "SLURM_JOB_NAME: $(get(ENV, "SLURM_JOB_NAME", "N/A"))"
+    @info "SLURM_SUBMIT_HOST: $(get(ENV, "SLURM_SUBMIT_HOST", "N/A"))"
+    @info "PBS_JOBID: $(get(ENV, "PBS_JOBID", "N/A"))"
+    @info "PBS_JOBDIR: $(get(ENV, "PBS_JOBDIR", "N/A"))"
+end
+
+# ============= FORMATTERS =============
+
+# TODO: move to a dedicated package?
+function dataframe_to_md(df::AbstractDataFrame)
+    s = string(df)
+    s = foldl(replace, [(c => "|" for c in ["│", "┼", "├", "┤"])..., "─" => "-"]; init = s) # replace UTF symbols
+    s = [l * "\n" for (i, l) in enumerate(split(s, "\n")) if i != 3] |> join
+    println(s)
+end
 
 end # module
